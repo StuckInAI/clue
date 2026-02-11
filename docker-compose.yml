@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: clue-postgres
+    environment:
+      POSTGRES_USER: clue_user
+      POSTGRES_PASSWORD: clue_password
+      POSTGRES_DB: clue_db
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clue_user -d clue_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - clue-network
+
+  clue-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: clue-app
+    environment:
+      DATABASE_URL: postgresql://clue_user:clue_password@postgres:5432/clue_db?schema=public
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
+    ports:
+      - '3000:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./public:/app/public:ro
+      - ./prisma:/app/prisma:ro
+    networks:
+      - clue-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:
+
+networks:
+  clue-network:
+    driver: bridge
