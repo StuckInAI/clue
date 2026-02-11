@@ -1,0 +1,196 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  accounts      Account[]
+  sessions      Session[]
+  gameStats     GameStat[]
+  gameSessions  GameSession[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+model GameCase {
+  id          String   @id @default(cuid())
+  title       String
+  description String   @db.Text
+  difficulty  String   // easy, medium, hard
+  points      Int      @default(100)
+  timeLimit   Int?     // minutes
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  locations   Location[]
+  suspects    Suspect[]
+  clues       Clue[]
+  solutions   Solution[]
+  sessions    GameSession[]
+
+  @@map("game_cases")
+}
+
+model Location {
+  id          String   @id @default(cuid())
+  name        String
+  description String   @db.Text
+  image       String?
+  gameCaseId  String
+  gameCase    GameCase @relation(fields: [gameCaseId], references: [id], onDelete: Cascade)
+  clues       Clue[]
+
+  @@map("locations")
+}
+
+model Suspect {
+  id          String   @id @default(cuid())
+  name        String
+  description String   @db.Text
+  motive      String   @db.Text
+  alibi       String   @db.Text
+  image       String?
+  gameCaseId  String
+  gameCase    GameCase @relation(fields: [gameCaseId], references: [id], onDelete: Cascade)
+  solutions   Solution[]
+
+  @@map("suspects")
+}
+
+model Clue {
+  id          String   @id @default(cuid())
+  title       String
+  description String   @db.Text
+  type        String   // evidence, motive, alibi
+  locationId  String?
+  location    Location? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  gameCaseId  String
+  gameCase    GameCase @relation(fields: [gameCaseId], references: [id], onDelete: Cascade)
+  order       Int      @default(0)
+  collectedIn GameSessionClue[]
+
+  @@map("clues")
+}
+
+model Solution {
+  id          String   @id @default(cuid())
+  suspectId   String
+  method      String   @db.Text
+  motive      String   @db.Text
+  gameCaseId  String
+  suspect     Suspect  @relation(fields: [suspectId], references: [id], onDelete: Cascade)
+  gameCase    GameCase @relation(fields: [gameCaseId], references: [id], onDelete: Cascade)
+
+  @@unique([gameCaseId, suspectId])
+  @@map("solutions")
+}
+
+model GameSession {
+  id           String       @id @default(cuid())
+  userId       String
+  gameCaseId   String
+  status       String       // active, completed, abandoned
+  score        Int          @default(0)
+  timeSpent    Int          @default(0) // minutes
+  startedAt    DateTime     @default(now())
+  completedAt  DateTime?
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gameCase     GameCase     @relation(fields: [gameCaseId], references: [id], onDelete: Cascade)
+  collectedClues GameSessionClue[]
+  submissions  Submission[]
+
+  @@map("game_sessions")
+}
+
+model GameSessionClue {
+  id             String      @id @default(cuid())
+  gameSessionId  String
+  clueId         String
+  discoveredAt   DateTime    @default(now())
+  gameSession    GameSession @relation(fields: [gameSessionId], references: [id], onDelete: Cascade)
+  clue           Clue        @relation(fields: [clueId], references: [id], onDelete: Cascade)
+
+  @@unique([gameSessionId, clueId])
+  @@map("game_session_clues")
+}
+
+model Submission {
+  id             String      @id @default(cuid())
+  gameSessionId  String
+  suspectId      String
+  method         String      @db.Text
+  motive         String      @db.Text
+  submittedAt    DateTime    @default(now())
+  isCorrect      Boolean     @default(false)
+  pointsAwarded  Int         @default(0)
+  gameSession    GameSession @relation(fields: [gameSessionId], references: [id], onDelete: Cascade)
+  suspect        Suspect     @relation(fields: [suspectId], references: [id], onDelete: Cascade)
+
+  @@map("submissions")
+}
+
+model GameStat {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  gamesPlayed  Int      @default(0)
+  gamesSolved  Int      @default(0)
+  totalScore   Int      @default(0)
+  averageTime  Float    @default(0.0)
+  bestScore    Int      @default(0)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("game_stats")
+}
